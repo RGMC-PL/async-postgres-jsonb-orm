@@ -1,7 +1,7 @@
 package gg.amy.pgorm;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import gg.amy.pgorm.annotations.BtreeIndex;
 import gg.amy.pgorm.annotations.GIndex;
 import gg.amy.pgorm.annotations.PrimaryKey;
@@ -10,7 +10,6 @@ import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.lang.reflect.Field;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -26,7 +25,7 @@ import java.util.Optional;
  */
 @SuppressWarnings({"WeakerAccess", "unused"})
 public class PgMapper<T> {
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final Gson MAPPER = new Gson();
     @Getter
     private final Class<T> type;
     @Getter
@@ -94,13 +93,28 @@ public class PgMapper<T> {
             }
         }
     }
+
+    public List<T> loadAll() {
+        List<T> entities = new ArrayList<>();
+
+        this.store.sql("SELECT * FROM " + this.table.value(), statement -> {
+            ResultSet result = statement.executeQuery();
+
+            while (result.next()) {
+                T entity = this.loadFromResultSet(result);
+                entities.add(entity);
+            }
+        });
+
+        return entities;
+    }
     
     public void save(final T entity) {
         pkField.setAccessible(true);
         try {
             final Object pk = pkField.get(entity);
             // Map the object to JSON
-            final String json = MAPPER.writeValueAsString(entity);
+            final String json = MAPPER.toJson(entity);
             // Oh god this is so ugly
             store.sql("INSERT INTO " + table.value() + " (" + primaryKey.value() + ", data) values (?, to_jsonb(?::jsonb)) " +
                     "ON CONFLICT (" + primaryKey.value() + ") DO UPDATE SET " + primaryKey.value() + " = ?, data = to_jsonb(?::jsonb);", c -> {
@@ -112,8 +126,6 @@ public class PgMapper<T> {
             });
         } catch(final IllegalAccessException e) {
             logger.error("Couldn't access primary key for entity {} (value: {}): {}", type.getName(), entity, e);
-        } catch(final JsonProcessingException e) {
-            logger.error("Couldn't map entity {} (value: {}) to JSON: {}", type.getName(), entity, e);
         }
     }
     
@@ -182,8 +194,8 @@ public class PgMapper<T> {
         try {
             final String json = resultSet.getString("data");
             try {
-                return MAPPER.readValue(json, type);
-            } catch(final IOException e) {
+                return MAPPER.fromJson(json, type);
+            } catch(final JsonSyntaxException e) {
                 logger.error("Couldn't load entity {} from JSON {}: {}", type.getName(), json, e);
                 throw new IllegalStateException("Couldn't load entity " + type.getName() + " from JSON " + json, e);
             }

@@ -97,12 +97,3 @@ public class Example {
     }
 }
 ```
-
-## Things to remember
-
-- You can choose index type with `@BtreeIndex` vs `@GIndex`. The latter is GIN indexing.
-
-- The `AsyncPgMapper` uses `Executors.newCachedThreadPool()` by default. In the future, there might be a way to set an 
-  alternative.
-
-- Data is mapped to/from JSON using Jackson. Make sure your entity classes work correctly with Jackson.
